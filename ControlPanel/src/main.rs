@@ -27,6 +27,12 @@ async fn main() {
     let address = SocketAddr::from(([127, 0, 0, 1], 3000)); // that 3000 is the port number
 
     println!(" server running on http://{}", address);
+    
+    let listener = tokio::net::TcpListener::bind(address)
+        .await
+        .unwrap();
 
-    axum::Server::bind(&address).serve(app.into_make_service()).await.unwrap();
+    axum::serve(listener, app)
+        .await
+        .unwrap();
 }
