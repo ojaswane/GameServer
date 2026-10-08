@@ -1,0 +1,32 @@
+# Control Panel
+
+This **Control Panel** is the backend control plane for my old laptop which will act as a cloud server
+
+It is responsible for managing game sessions, scheduling users onto available gaming workers, and maintaining the state of the cloud gaming infrastructure.
+
+## Architecture
+
+```text
+                    CloudRig Web
+                  (Next.js Client)
+                         |
+                    HTTP / WebSocket
+                         |
+                         v
+              +----------------------+
+              |   CloudRig Server    |
+              |      (Rust)          |
+              +----------+-----------+
+                         |
+             +-----------+-----------+
+             |           |           |
+             v           v           v
+         Sessions    Scheduler    Workers
+             |           |           |
+             +-----------+-----------+
+                         |
+                         v
+                  Gaming Worker
+                         |
+                         v
+                    Game Process
