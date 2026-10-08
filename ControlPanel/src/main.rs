@@ -9,6 +9,24 @@ struct HealthCheckResponse {
     status: String,
 }
 
-fn main() {
-    unimplemented!();
+
+// when client sents the Request , to check the json response
+async fn health_check() -> Json<HealthCheckResponse> {
+    let response = HealthCheckResponse {
+        status: "OK".to_string(),
+    };
+    Json(response)
+}
+
+
+#[tokio::main]
+async fn main() {
+    // Check the json response
+    let app = Router::new().route("/health", get(health_check));
+
+    let address = SocketAddr::from(([127, 0, 0, 1], 3000)); // that 3000 is the port number
+
+    println!(" server running on http://{}", address);
+
+    axum::Server::bind(&address).serve(app.into_make_service()).await.unwrap();
 }
