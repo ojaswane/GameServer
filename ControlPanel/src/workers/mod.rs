@@ -1,11 +1,12 @@
-// The main job is to let the client know that the server is available or not
+// this is basically for the gameAgent data eg, worker1 : is offline or online , and how many max sessions it can handle and how many current sessions it has
 use serde::Serialize;
 
 #[derive(Debug, Clone, Serialize)]
 struct Worker {
     id: String,
     status: WorkerStatus,
-    max
+    max_sessions: usize,
+    current_sessions: usize,
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq, Eq, Hash)]
