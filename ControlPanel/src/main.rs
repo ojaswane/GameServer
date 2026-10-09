@@ -3,6 +3,7 @@
 use axum::{Json, Router, routing::get};
 use serde::Serialize;
 use std::net::SocketAddr;
+mod workers;
 
 #[derive(Serialize)]
 struct HealthCheckResponse {
