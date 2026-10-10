@@ -24,7 +24,9 @@ async fn health_check() -> Json<HealthCheckResponse> {
 async fn main() {
     // Check the json response
     let app = Router::new().route("/health", get(health_check));
-    let available_workers = Router::new().route("/available_workers", get(workers::available_slots))?;
+    
+    //get the avaible workers from the worker module
+    let available_workers = Router::new().route("/workers", get(workers::available_slots));
 
     let address = SocketAddr::from(([127, 0, 0, 1], 3000)); // that 3000 is the port number
 
