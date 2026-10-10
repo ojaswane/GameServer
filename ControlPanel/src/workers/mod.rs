@@ -16,6 +16,10 @@ pub enum WorkerStatus {
     Online,
 }
 
+// Shared registry of workers (game agents)
+pub type WorkerRegistry = Arc<RwLock<HashMap<String, Worker>>>;
+
+
 impl Worker {
     pub fn available_slots(&self) -> u32 {
         self.max_sessions.saturating_sub(self.active_sessions) as u32
@@ -31,24 +35,32 @@ pub struct WorkerResponse {
     pub available_slots: u32,
 }
 
-pub async fn list_workers() -> Json<Vec<WorkerResponse>> {
 
-    // Dummy worker data TODO: update this to fetch real worker data from the game agent
-    let worker = Worker {
-        id: "gaming-pc-1".to_string(),
-        status: WorkerStatus::Online,
-        max_sessions: 3,
-        active_sessions: 1,
-    };
+#[derive(Serialize)]
+pub struct WorkerResponse{
+    pub id: String,
+    pub status: WorkerStatus,
+    pub max_sessions: u32,
+    pub active_sessions: u32,
+    pub available_slots: u32,
+}
+
+pub async fn list_workers(
+    State(workers): State<WorkerRegistry>,
+) -> Json<Vec<WorkerResponse>> {
+    let workers = workers.read().await?;
 
     let available_slots = worker.available_slots();
-    let response = WorkerResponse {
-        id: worker.id,
-        status: worker.status,
-        max_sessions: worker.max_sessions,
-        active_sessions: worker.active_sessions,
-        available_slots,
-    };
+    let response: Vec<WorkerResponse> = workers
+        .values()
+        .map(|worker| WorkerResponse {
+            id: worker.id.clone(),
+            status: worker.status.clone(),
+            max_sessions: worker.max_sessions,
+            active_sessions: worker.active_sessions,
+            available_slots: worker.available_slots(),
+        })
+        .collect();
 
-    Json(vec![response])
+    Json(response)
 }
