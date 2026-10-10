@@ -20,6 +20,7 @@ async fn health_check() -> Json<HealthCheckResponse> {
     Json(response)
 }
 
+// TODO : Register few workers(game agents) in the worker registry and then check the json response for /workers endpoint
 
 #[tokio::main]
 async fn main() {
