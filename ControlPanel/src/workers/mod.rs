@@ -1,6 +1,8 @@
 // this is basically for the gameAgent data eg, worker1 : is offline or online , and how many max sessions it can handle and how many current sessions it has
+use axum::{extract::State, Json};
 use serde::Serialize;
-use axum::{Json};
+use std::{collections::HashMap, sync::Arc};
+use tokio::sync::RwLock;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Worker {
@@ -36,21 +38,11 @@ pub struct WorkerResponse {
 }
 
 
-#[derive(Serialize)]
-pub struct WorkerResponse{
-    pub id: String,
-    pub status: WorkerStatus,
-    pub max_sessions: u32,
-    pub active_sessions: u32,
-    pub available_slots: u32,
-}
-
 pub async fn list_workers(
     State(workers): State<WorkerRegistry>,
 ) -> Json<Vec<WorkerResponse>> {
-    let workers = workers.read().await?;
+    let workers = workers.read().await;
 
-    let available_slots = worker.available_slots();
     let response: Vec<WorkerResponse> = workers
         .values()
         .map(|worker| WorkerResponse {
