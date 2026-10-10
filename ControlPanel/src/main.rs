@@ -26,7 +26,7 @@ async fn main() {
     let app = Router::new().route("/health", get(health_check));
     
     //get the avaible workers from the worker module
-    let available_workers = Router::new().route("/workers", get(workers::available_slots));
+    let available_workers = Router::new().route("/workers", get(workers::list_workers));
 
     let address = SocketAddr::from(([127, 0, 0, 1], 3000)); // that 3000 is the port number
 
