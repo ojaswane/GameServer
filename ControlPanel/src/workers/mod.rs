@@ -33,7 +33,7 @@ pub struct WorkerResponse {
 
 pub async fn list_workers() -> Json<Vec<WorkerResponse>> {
 
-    // Dummy worker data TODO: update this to fetch real worker data
+    // Dummy worker data TODO: update this to fetch real worker data from the game agent
     let worker = Worker {
         id: "gaming-pc-1".to_string(),
         status: WorkerStatus::Online,
@@ -41,12 +41,13 @@ pub async fn list_workers() -> Json<Vec<WorkerResponse>> {
         active_sessions: 1,
     };
 
+    let available_slots = worker.available_slots();
     let response = WorkerResponse {
         id: worker.id,
         status: worker.status,
         max_sessions: worker.max_sessions,
         active_sessions: worker.active_sessions,
-        available_slots: worker.available_slots(),
+        available_slots,
     };
 
     Json(vec![response])
