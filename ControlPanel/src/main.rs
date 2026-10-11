@@ -31,7 +31,10 @@ async fn main() {
     // Check the json response
     let app = Router::new()
         .route("/health", get(health_check))
-        .route("/workers", get(workers::list_workers))
+        .route(
+            "/workers",
+            get(workers::list_workers).post(workers::register_worker),
+        )
         .with_state(worker_registry);
 
     let address = SocketAddr::from(([127, 0, 0, 1], 3000)); // that 3000 is the port number

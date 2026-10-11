@@ -1,6 +1,6 @@
 // this is basically for the gameAgent data eg, worker1 : is offline or online , and how many max sessions it can handle and how many current sessions it has
 use axum::{extract::State, Json , http::StatusCode};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::RwLock;
 
@@ -40,14 +40,15 @@ pub struct WorkerResponse {
 
 
 // register workers
-#[derive(Serialize)]
+#[derive(Deserialize)]
 pub struct RegisterWorkerRequest {
     pub id: String,
     pub max_sessions: u32,
 }
 
+// This is to write the game agent data into the hashmap to register the entry (for the v1 , we will have only one game agent)
 pub async fn register_worker(
-    State(workers): State<workerRegistry>,
+    State(workers): State<WorkerRegistry>,
     Json(request): Json<RegisterWorkerRequest>,
 ) -> Result<StatusCode, (StatusCode, String)> {
     let mut workers = workers.write().await;
@@ -69,7 +70,6 @@ pub async fn register_worker(
     workers.insert(request.id.clone(), worker);
 
     Ok(StatusCode::CREATED)
-    }
 }
 
 pub async fn list_workers(
