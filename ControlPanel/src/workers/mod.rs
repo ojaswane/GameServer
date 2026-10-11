@@ -3,13 +3,15 @@ use axum::{extract::State, Json , http::StatusCode};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::RwLock;
+use std::time::Instant;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub struct Worker {
     id: String,
     status: WorkerStatus,
     pub max_sessions: u32,
     pub active_sessions: u32,
+    pub last_heartbeat: Instant,
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq, Eq, Hash)]
@@ -37,8 +39,6 @@ pub struct WorkerResponse {
     pub available_slots: u32,
 }
 
-
-
 // register workers
 #[derive(Deserialize)]
 pub struct RegisterWorkerRequest {
@@ -60,11 +60,13 @@ pub async fn register_worker(
         ));
     }
 
+
     let worker = Worker {
         id: request.id.clone(),
         status: WorkerStatus::Online,
         max_sessions: request.max_sessions,
         active_sessions: 0,
+        last_heartbeat: Instant::now(),
     };
 
     let response = WorkerResponse {
@@ -97,4 +99,31 @@ pub async fn list_workers(
         .collect();
 
     Json(response)
+}
+
+//heartbeat response to check if the game agent is online or offline
+#[derive(Serialize)]
+pub struct HeartbeatResponse {
+    pub status: String,
+}
+
+pub async fn heartbeat(
+    Path(worker_id): Path<String>,
+    State(registry): State<WorkerRegistry>,
+) -> Result<Json<HeartbeatResponse>, (StatusCode, String)> {
+    let mut workers = registry
+        .write()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let worker = workers
+        .get_mut(&worker_id)
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    worker.last_heartbeat = Instant::now();
+    worker.status = WorkerStatus::Online;
+
+    Ok(Json(HeartbeatResponse {
+        status: "heartbeat_received".to_string(),
+    }))
+
 }
