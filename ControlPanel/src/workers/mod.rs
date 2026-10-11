@@ -1,5 +1,5 @@
 // this is basically for the gameAgent data eg, worker1 : is offline or online , and how many max sessions it can handle and how many current sessions it has
-use axum::{extract::State, Json};
+use axum::{extract::State, Json , http::StatusCode};
 use serde::Serialize;
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::RwLock;
@@ -35,6 +35,15 @@ pub struct WorkerResponse {
     pub max_sessions: u32,
     pub active_sessions: u32,
     pub available_slots: u32,
+}
+
+
+
+// register workers
+#[derive(Serialize)]
+pub struct RegisterWorkerRequest {
+    pub id: String,
+    pub max_sessions: u32,
 }
 
 
