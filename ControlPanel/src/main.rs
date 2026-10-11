@@ -58,6 +58,7 @@ async fn main() {
             "/workers",
             get(workers::list_workers).post(workers::register_worker),
         )
+        .route("/workers/register", axum::routing::post(workers::register_worker))
         .route(
             "/workers/{worker_id}/heartbeat",
             axum::routing::post(workers::heartbeat),
