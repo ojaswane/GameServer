@@ -35,6 +35,10 @@ async fn main() {
             "/workers",
             get(workers::list_workers).post(workers::register_worker),
         )
+        .route(
+            "/workers/{worker_id}/heartbeat",
+            axum::routing::post(workers::heartbeat),
+        )
         .with_state(worker_registry);
 
     let address = SocketAddr::from(([127, 0, 0, 1], 3000)); // that 3000 is the port number

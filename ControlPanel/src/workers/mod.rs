@@ -127,3 +127,8 @@ pub async fn heartbeat(
     }))
 
 }
+
+// monitor the heartbeat of the game agent
+pub fn monitor_heartbeat() {
+    unimplemented!();
+}
