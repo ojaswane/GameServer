@@ -3,8 +3,11 @@
 use axum::{Json, Router, routing::get};
 use serde::Serialize;
 use std::{collections::HashMap, net::SocketAddr, sync::Arc};
+use std::time::Duration;
 use tokio::sync::RwLock;
+use workers::WorkerRegistry;
 mod workers;
+
 
 #[derive(Serialize)]
 struct HealthCheckResponse {
@@ -20,13 +23,33 @@ async fn health_check() -> Json<HealthCheckResponse> {
     Json(response)
 }
 
-// TODO : Register few workers(game agents) in the worker registry and then check the json response for /workers endpoint
+// monitor the heartbeat of the game agent
+pub async fn monitor_workers(registry: WorkerRegistry) {
+    let mut interval = tokio::time::interval(Duration::from_secs(5));
+
+    loop {
+        interval.tick().await;
+
+        let mut workers = registry.write().await;
+
+        // Mark workers offline after 30 seconds without a heartbeat.
+        for worker in workers.values_mut() {
+            worker.mark_offline_if_stale(Duration::from_secs(30));
+        }
+    }
+}
 
 #[tokio::main]
 async fn main() {
     // Create one shared worker registry.
     let worker_registry: workers::WorkerRegistry =
         Arc::new(RwLock::new(HashMap::new()));
+        
+    let monitor_registry = Arc::clone(&worker_registry);
+
+    tokio::spawn(async move {
+        monitor_workers(monitor_registry).await;
+    });
 
     // Check the json response
     let app = Router::new()

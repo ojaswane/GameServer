@@ -1,5 +1,5 @@
 // this is basically for the gameAgent data eg, worker1 : is offline or online , and how many max sessions it can handle and how many current sessions it has
-use axum::{extract::State, Json , http::StatusCode};
+use axum::{extract::State, http::StatusCode, Json};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::RwLock;
@@ -27,6 +27,12 @@ pub type WorkerRegistry = Arc<RwLock<HashMap<String, Worker>>>;
 impl Worker {
     pub fn available_slots(&self) -> u32 {
         self.max_sessions.saturating_sub(self.active_sessions) as u32
+    }
+
+    pub fn mark_offline_if_stale(&mut self, timeout: std::time::Duration) {
+        if self.last_heartbeat.elapsed() > timeout {
+            self.status = WorkerStatus::Offline;
+        }
     }
 }
 
@@ -108,16 +114,19 @@ pub struct HeartbeatResponse {
 }
 
 pub async fn heartbeat(
-    Path(worker_id): Path<String>,
+    axum::extract::Path(worker_id): axum::extract::Path<String>,
     State(registry): State<WorkerRegistry>,
 ) -> Result<Json<HeartbeatResponse>, (StatusCode, String)> {
-    let mut workers = registry
-        .write()
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let mut workers = registry.write().await;
 
     let worker = workers
         .get_mut(&worker_id)
-        .ok_or(StatusCode::NOT_FOUND)?;
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                format!("Worker '{worker_id}' was not found"),
+            )
+        })?;
 
     worker.last_heartbeat = Instant::now();
     worker.status = WorkerStatus::Online;
@@ -126,9 +135,4 @@ pub async fn heartbeat(
         status: "heartbeat_received".to_string(),
     }))
 
-}
-
-// monitor the heartbeat of the game agent
-pub fn monitor_heartbeat() {
-    unimplemented!();
 }
