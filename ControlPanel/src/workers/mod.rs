@@ -50,7 +50,7 @@ pub struct RegisterWorkerRequest {
 pub async fn register_worker(
     State(workers): State<WorkerRegistry>,
     Json(request): Json<RegisterWorkerRequest>,
-) -> Result<StatusCode, (StatusCode, String)> {
+) -> Result<Json<WorkerResponse>, (StatusCode, String)> {
     let mut workers = workers.write().await;
 
     if workers.contains_key(&request.id) {
@@ -67,9 +67,17 @@ pub async fn register_worker(
         active_sessions: 0,
     };
 
+    let response = WorkerResponse {
+        id: worker.id.clone(),
+        status: worker.status.clone(),
+        max_sessions: worker.max_sessions,
+        active_sessions: worker.active_sessions,
+        available_slots: worker.available_slots(),
+    };
+
     workers.insert(request.id.clone(), worker);
 
-    Ok(StatusCode::CREATED)
+    Ok(Json(response))
 }
 
 pub async fn list_workers(
