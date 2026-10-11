@@ -46,6 +46,31 @@ pub struct RegisterWorkerRequest {
     pub max_sessions: u32,
 }
 
+pub async fn register_worker(
+    State(workers): State<workerRegistry>,
+    Json(request): Json<RegisterWorkerRequest>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    let mut workers = workers.write().await;
+
+    if workers.contains_key(&request.id) {
+        return Err((
+            StatusCode::CONFLICT,
+            format!("Worker with id '{}' already exists", request.id),
+        ));
+    }
+
+    let worker = Worker {
+        id: request.id.clone(),
+        status: WorkerStatus::Online,
+        max_sessions: request.max_sessions,
+        active_sessions: 0,
+    };
+
+    workers.insert(request.id.clone(), worker);
+
+    Ok(StatusCode::CREATED)
+    }
+}
 
 pub async fn list_workers(
     State(workers): State<WorkerRegistry>,
