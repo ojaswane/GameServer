@@ -6,6 +6,7 @@ use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 use std::time::Duration;
 use tokio::sync::RwLock;
 use workers::WorkerRegistry;
+mod session;
 mod workers;
 
 
