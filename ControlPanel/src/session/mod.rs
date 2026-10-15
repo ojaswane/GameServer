@@ -59,7 +59,7 @@ impl ClientSession {
     }
 }
 
-pub fn create_sessions(
+pub fn create_client_sessions(
     headers: HeaderMap
     Json(request): Json<session::CreateSessionRequest>,
 ) -> Result<Json<session::ClientSession>, (StatusCode, String)> {
@@ -73,5 +73,4 @@ pub fn create_sessions(
             "Missing or invalid Idempotency-Key header".to_string(),
         ))?;
 
-        
 }

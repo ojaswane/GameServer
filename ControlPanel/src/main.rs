@@ -65,6 +65,7 @@ async fn main() {
             axum::routing::post(workers::heartbeat),
         )
         .with_state(worker_registry);
+        .route("/clientsession").post(session::create_client_session)
 
     let address = SocketAddr::from(([127, 0, 0, 1], 3000)); // that 3000 is the port number
 
