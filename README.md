@@ -23,7 +23,7 @@ From this directory:
 cargo run
 ```
 
-The server listens on `http://127.0.0.1:3000`.
+The server listens for now on `http://172.20.10.2:3000`.
 
 ## HTTP API
 
