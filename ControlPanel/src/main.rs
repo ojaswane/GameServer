@@ -1,6 +1,6 @@
 // HTTP Request (from the browser) ----> Go to the middleware ----> Go to the Home Server ----> We will send the request to the queue (if queue is not full) ----> Game agent (websockets) will pick up the request and process it ----> Game agent will send the response back to the Home Server ----> Home Server will send the response back to the middleware ----> Middleware will send the response back to the browser
 
-use axum::{Json, Router, routing::get};
+use axum::{Json, Router, routing::{get, post}};
 use serde::Serialize;
 use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 use std::time::Duration;
@@ -45,6 +45,8 @@ async fn main() {
     // Create one shared worker registry.
     let worker_registry: workers::WorkerRegistry =
         Arc::new(RwLock::new(HashMap::new()));
+    let session_registry: session::SessionRegistry =
+        Arc::new(RwLock::new(HashMap::new()));
         
     let monitor_registry = Arc::clone(&worker_registry);
 
@@ -53,7 +55,7 @@ async fn main() {
     });
 
     // Check the json response
-    let app = Router::new()
+    let worker_routes = Router::new()
         .route("/health", get(health_check))
         .route(
             "/workers",
@@ -65,7 +67,12 @@ async fn main() {
             axum::routing::post(workers::heartbeat),
         )
         .with_state(worker_registry);
-        .route("/clientsession").post(session::create_client_session)
+
+    let session_routes = Router::new()
+        .route("/sessions", post(session::create_client_session))
+        .with_state(session_registry);
+
+    let app = worker_routes.merge(session_routes);
 
     let address = SocketAddr::from(([127, 0, 0, 1], 3000)); // that 3000 is the port number
 

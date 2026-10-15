@@ -1,15 +1,25 @@
 //! Session data exchanged between the browser, control panel, and game agent.
 
 use axum::{
+    extract::State,
     http::{HeaderMap, StatusCode},
     Json,
 };
 use serde::{Deserialize, Serialize};
+use std::{
+    collections::HashMap,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
+    time::{SystemTime, UNIX_EPOCH},
+};
+use tokio::sync::RwLock;
 
-/// Lifecycle of a requested game session.
-///
-/// `Queued` and `Starting` are useful to distinguish waiting for an agent from
-/// an agent actively preparing the game. `Ready` means the browser can connect.
+/// In-memory mapping from an idempotency key to its created session.
+/// Persist this mapping in the database for idempotency across server restarts.
+pub type SessionRegistry = Arc<RwLock<HashMap<String, ClientSession>>>;
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum SessionStatus {
@@ -22,15 +32,13 @@ pub enum SessionStatus {
     Failed,
 }
 
-/// Request accepted from a browser is in `ClientSession`
-
+/// Request accepted from a browser.
 #[derive(Debug, Clone, Deserialize)]
 pub struct CreateSessionRequest {
     pub game_name: String,
 }
 
-/// The control panel's record for one browser game session.
-
+/// Control panel's record for one browser game session.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClientSession {
     pub id: String,
@@ -44,7 +52,6 @@ pub struct ClientSession {
 }
 
 impl ClientSession {
-    /// Make a new session record after accepting a browser request.
     pub fn queued(id: String, game_name: String, now_ms: u64) -> Self {
         Self {
             id,
@@ -59,18 +66,45 @@ impl ClientSession {
     }
 }
 
-pub fn create_client_sessions(
-    headers: HeaderMap
-    Json(request): Json<session::CreateSessionRequest>,
-) -> Result<Json<session::ClientSession>, (StatusCode, String)> {
+pub async fn create_client_session(
+    State(sessions): State<SessionRegistry>,
+    headers: HeaderMap,
+    Json(request): Json<CreateSessionRequest>,
+) -> Result<Json<ClientSession>, (StatusCode, String)> {
     let key = headers
         .get("idempotency-key")
         .and_then(|value| value.to_str().ok())
         .map(str::trim)
-        .filter(|value| !value.is_empty() )
+        .filter(|value| !value.is_empty())
         .ok_or((
             StatusCode::BAD_REQUEST,
             "Missing or invalid Idempotency-Key header".to_string(),
         ))?;
 
+    // Keep lookup and insertion under one lock so simultaneous retries cannot create duplicate sessions.
+    let mut sessions = sessions.write().await;
+    if let Some(existing) = sessions.get(key) {
+        if existing.game_name != request.game_name {
+            return Err((
+                StatusCode::CONFLICT,
+                "Idempotency-Key was already used for a game".to_string(),
+            ));
+        }
+        return Ok(Json(existing.clone()));
+    }
+
+    static NEXT_ID: AtomicU64 = AtomicU64::new(1);
+    let now_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+
+    let id = format!(
+        "session-{now_ms}-{}",
+        NEXT_ID.fetch_add(1, Ordering::Relaxed)
+    );
+    let session = ClientSession::queued(id, request.game_name, now_ms);
+    sessions.insert(key.to_owned(), session.clone());
+
+    Ok(Json(session))
 }
