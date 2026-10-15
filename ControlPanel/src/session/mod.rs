@@ -1,5 +1,9 @@
 //! Session data exchanged between the browser, control panel, and game agent.
 
+use axum::{
+    http::{HeaderMap, StatusCode},
+    Json,
+};
 use serde::{Deserialize, Serialize};
 
 /// Lifecycle of a requested game session.
@@ -53,4 +57,21 @@ impl ClientSession {
             failure_reason: None,
         }
     }
+}
+
+pub fn create_sessions(
+    headers: HeaderMap
+    Json(request): Json<session::CreateSessionRequest>,
+) -> Result<Json<session::ClientSession>, (StatusCode, String)> {
+    let key = headers
+        .get("idempotency-key")
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+        .filter(|value| !value.is_empty() )
+        .ok_or((
+            StatusCode::BAD_REQUEST,
+            "Missing or invalid Idempotency-Key header".to_string(),
+        ))?;
+
+        
 }
