@@ -26,7 +26,7 @@ pub struct CreateSessionRequest {
 }
 
 /// The control panel's record for one browser game session.
-///
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClientSession {
     pub id: String,
