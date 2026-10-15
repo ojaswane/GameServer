@@ -1,5 +1,6 @@
 // this is basically for the gameAgent data eg, worker1 : is offline or online , and how many max sessions it can handle and how many current sessions it has
-use axum::{extract::State, http::StatusCode, Json};
+use axum::{extract::{Path, State}, http::StatusCode, Json};
+use crate::session::{ClientSession, SessionRegistry, SessionStatus};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::RwLock;
@@ -58,6 +59,13 @@ pub async fn register_worker(
     Json(request): Json<RegisterWorkerRequest>,
 ) -> Result<Json<WorkerResponse>, (StatusCode, String)> {
     let mut workers = workers.write().await;
+
+    if request.max_sessions == 0 {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "max_sessions must be greater than zero".to_string(),
+        ));
+    }
 
     if workers.contains_key(&request.id) {
         return Err((
@@ -135,4 +143,44 @@ pub async fn heartbeat(
         status: "heartbeat_received".to_string(),
     }))
 
+}
+
+
+/// Worker polls this endpoint to claim one queued session to start.
+/// Session assignment and slot reservation happen together while holding both
+/// registries, so competing workers cannot claim the same session.
+pub async fn game_setup(
+    Path(worker_id): Path<String>,
+    State((workers, sessions)): State<(WorkerRegistry, SessionRegistry)>,
+) -> Result<Json<Option<ClientSession>>, (StatusCode, String)> {
+    let mut workers = workers.write().await;
+    let worker = workers.get_mut(&worker_id).ok_or_else(|| {
+        (StatusCode::NOT_FOUND, format!("Worker '{worker_id}' was not found"))
+    })?;
+
+    if worker.status != WorkerStatus::Online {
+        return Err((StatusCode::SERVICE_UNAVAILABLE, "Worker is offline".to_string()));
+    }
+    
+    if worker.available_slots() == 0 {
+        return Err((StatusCode::CONFLICT, "Worker has no available session slots".to_string()));
+    }
+
+    let mut sessions = sessions.write().await;
+    let Some(session) = sessions
+        .values_mut()
+        .find(|session| session.status == SessionStatus::Queued)
+    else {
+        return Ok(Json(None));
+    };
+
+    session.worker_id = Some(worker_id);
+    session.status = SessionStatus::Starting;
+    session.updated_at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+    worker.active_sessions += 1;
+
+    Ok(Json(Some(session.clone())))
 }

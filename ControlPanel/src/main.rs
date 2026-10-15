@@ -66,13 +66,20 @@ async fn main() {
             "/workers/{worker_id}/heartbeat",
             axum::routing::post(workers::heartbeat),
         )
-        .with_state(worker_registry);
+        .with_state(Arc::clone(&worker_registry));
 
     let session_routes = Router::new()
         .route("/sessions", post(session::create_client_session))
-        .with_state(session_registry);
+        .with_state(Arc::clone(&session_registry));
 
-    let app = worker_routes.merge(session_routes);
+    let setup_routes = Router::new()
+        .route(
+            "/workers/{worker_id}/game-setup",
+            post(workers::game_setup),
+        )
+        .with_state((worker_registry, session_registry));
+
+    let app = worker_routes.merge(session_routes).merge(setup_routes);
 
     let address = SocketAddr::from(([127, 0, 0, 1], 3000)); // that 3000 is the port number
 

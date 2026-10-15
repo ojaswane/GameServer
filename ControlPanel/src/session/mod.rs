@@ -94,6 +94,7 @@ pub async fn create_client_session(
     }
 
     static NEXT_ID: AtomicU64 = AtomicU64::new(1);
+
     let now_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
