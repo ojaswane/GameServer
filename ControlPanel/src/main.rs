@@ -7,6 +7,7 @@ use std::time::Duration;
 use tokio::sync::RwLock;
 use workers::WorkerRegistry;
 mod session;
+mod signaling;
 mod workers;
 
 
@@ -76,6 +77,10 @@ async fn main() {
         .route(
             "/sessions/{session_id}/connection-info",
             get(workers::session_connection_info),
+        )
+        .route(
+            "/sessions/{session_id}/signaling-peers",
+            get(signaling::signaling),
         )
         .with_state((Arc::clone(&worker_registry), Arc::clone(&session_registry)));
 

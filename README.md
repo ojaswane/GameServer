@@ -116,6 +116,8 @@ GET /sessions/{session_id}/connection-info
 
 The response includes client/session ID and IP, plus assigned worker ID and IP. These are IPs observed on the HTTP requests. A future WebSocket handler should capture the remote address for each WebSocket connection directly. This endpoint is unauthenticated like the rest of the development API, so use it only on a trusted network.
 
+`GET /sessions/{session_id}/signaling-peers` calls the same lookup and extracts those fields into local variables in the signaling module. It is an initial scaffold; it does not establish a WebSocket or exchange WebRTC messages yet.
+
 Example response when a session is assigned:
 
 ```json
