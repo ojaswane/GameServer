@@ -81,6 +81,8 @@ Content-Type: application/json
 
 The first request creates a `queued` session. Retrying with the same key and game name returns that session. Reusing a key for a different game returns `409 Conflict`. A missing or invalid key returns `400 Bad Request`.
 
+The response includes `client_id` (currently the same value as the session ID) and `client_ip`, the remote IP observed by the Control Panel for this request.
+
 Example response:
 
 ```json
@@ -105,6 +107,14 @@ POST /workers/agent-1/game-setup
 ```
 
 An online worker with an available slot receives one queued session. The Control Panel assigns the worker, changes the session status to `starting`, and reserves a worker slot. If no session is queued, the response body is `null`. Offline workers receive `503 Service Unavailable`, workers without capacity receive `409 Conflict`, and an unknown worker receives `404 Not Found`.
+
+Worker registration records the remote IP observed by the Control Panel, and worker responses include it. Once the session is assigned, the connection metadata can be fetched with:
+
+```http
+GET /sessions/{session_id}/connection-info
+```
+
+The response includes client/session ID and IP, plus assigned worker ID and IP. These are IPs observed on the HTTP requests. A future WebSocket handler should capture the remote address for each WebSocket connection directly. This endpoint is unauthenticated like the rest of the development API, so use it only on a trusted network.
 
 Example response when a session is assigned:
 

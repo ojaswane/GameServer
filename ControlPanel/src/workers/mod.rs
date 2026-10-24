@@ -2,13 +2,15 @@
 use axum::{extract::{Path, State}, http::StatusCode, Json};
 use crate::session::{ClientSession, SessionRegistry, SessionStatus};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 use tokio::sync::RwLock;
 use std::time::Instant;
 
 #[derive(Debug, Clone)]
 pub struct Worker {
     id: String,
+    /// Remote address observed when this worker registered.
+    ip: String,
     status: WorkerStatus,
     pub max_sessions: u32,
     pub active_sessions: u32,
@@ -40,6 +42,7 @@ impl Worker {
 #[derive(Serialize)]
 pub struct WorkerResponse {
     pub id: String,
+    pub ip: String,
     pub status: WorkerStatus,
     pub max_sessions: u32,
     pub active_sessions: u32,
@@ -56,6 +59,7 @@ pub struct RegisterWorkerRequest {
 // This is to write the game agent data into the hashmap to register the entry (for the v1 , we will have only one game agent)
 pub async fn register_worker(
     State(workers): State<WorkerRegistry>,
+    axum::extract::ConnectInfo(remote): axum::extract::ConnectInfo<SocketAddr>,
     Json(request): Json<RegisterWorkerRequest>,
 ) -> Result<Json<WorkerResponse>, (StatusCode, String)> {
     let mut workers = workers.write().await;
@@ -77,6 +81,7 @@ pub async fn register_worker(
 
     let worker = Worker {
         id: request.id.clone(),
+        ip: remote.ip().to_string(),
         status: WorkerStatus::Online,
         max_sessions: request.max_sessions,
         active_sessions: 0,
@@ -85,6 +90,7 @@ pub async fn register_worker(
 
     let response = WorkerResponse {
         id: worker.id.clone(),
+        ip: worker.ip.clone(),
         status: worker.status.clone(),
         max_sessions: worker.max_sessions,
         active_sessions: worker.active_sessions,
@@ -105,6 +111,7 @@ pub async fn list_workers(
         .values()
         .map(|worker| WorkerResponse {
             id: worker.id.clone(),
+            ip: worker.ip.clone(),
             status: worker.status.clone(),
             max_sessions: worker.max_sessions,
             active_sessions: worker.active_sessions,
@@ -113,6 +120,55 @@ pub async fn list_workers(
         .collect();
 
     Json(response)
+}
+
+/// Return the session identity and the worker assigned to it, including the
+/// remote IPs observed by the Control Panel for their HTTP connections.
+#[derive(Serialize)]
+pub struct SessionConnectionInfo {
+    pub client_id: String,
+    pub client_ip: String,
+    pub session_id: String,
+    pub worker_id: String,
+    pub worker_ip: String,
+}
+
+pub async fn session_connection_info(
+    Path(session_id): Path<String>,
+    State((workers, sessions)): State<(WorkerRegistry, SessionRegistry)>,
+) -> Result<Json<SessionConnectionInfo>, (StatusCode, String)> {
+    let sessions = sessions.read().await;
+    let (client_id, client_ip, found_session_id, worker_id) = {
+        let session = sessions
+            .values()
+            .find(|session| session.id == session_id)
+            .ok_or_else(|| (StatusCode::NOT_FOUND, "Session not found".to_string()))?;
+
+        let worker_id = session.worker_id.clone().ok_or_else(|| {
+            (StatusCode::CONFLICT, "Session has not been assigned to a worker".to_string())
+        })?;
+
+        (
+            session.client_id.clone(),
+            session.client_ip.clone(),
+            session.id.clone(),
+            worker_id,
+        )
+    };
+    drop(sessions);
+
+    let workers = workers.read().await;
+    let worker = workers.get(&worker_id).ok_or_else(|| {
+        (StatusCode::NOT_FOUND, "Assigned worker not found".to_string())
+    })?;
+
+    Ok(Json(SessionConnectionInfo {
+        client_id,
+        client_ip,
+        session_id: found_session_id,
+        worker_id: worker.id.clone(),
+        worker_ip: worker.ip.clone(),
+    }))
 }
 
 //heartbeat response to check if the game agent is online or offline

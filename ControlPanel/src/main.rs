@@ -72,6 +72,13 @@ async fn main() {
         .route("/sessions", post(session::create_client_session))
         .with_state(Arc::clone(&session_registry));
 
+    let connection_info_routes = Router::new()
+        .route(
+            "/sessions/{session_id}/connection-info",
+            get(workers::session_connection_info),
+        )
+        .with_state((Arc::clone(&worker_registry), Arc::clone(&session_registry)));
+
     let setup_routes = Router::new()
         .route(
             "/workers/{worker_id}/game-setup",
@@ -79,7 +86,10 @@ async fn main() {
         )
         .with_state((worker_registry, session_registry));
 
-    let app = worker_routes.merge(session_routes).merge(setup_routes);
+    let app = worker_routes
+        .merge(session_routes)
+        .merge(connection_info_routes)
+        .merge(setup_routes);
 
     let address = SocketAddr::from(([127, 0, 0, 1], 3000)); // that 3000 is the port number
 
@@ -89,7 +99,10 @@ async fn main() {
         .await
         .unwrap();
 
-    axum::serve(listener, app)
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
         .await
         .unwrap();
 }

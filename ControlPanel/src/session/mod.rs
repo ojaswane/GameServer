@@ -8,6 +8,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
+    net::SocketAddr,
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc,
@@ -42,6 +43,10 @@ pub struct CreateSessionRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClientSession {
     pub id: String,
+    /// The session ID also serves as the client-side session identity for routing.
+    pub client_id: String,
+    /// Remote address observed by the Control Panel when the session was created.
+    pub client_ip: String,
     pub game_name: String,
     pub worker_id: Option<String>,
     pub status: SessionStatus,
@@ -52,9 +57,11 @@ pub struct ClientSession {
 }
 
 impl ClientSession {
-    pub fn queued(id: String, game_name: String, now_ms: u64) -> Self {
+    pub fn queued(id: String, client_ip: String, game_name: String, now_ms: u64) -> Self {
         Self {
+            client_id: id.clone(),
             id,
+            client_ip,
             game_name,
             worker_id: None,
             status: SessionStatus::Queued,
@@ -68,6 +75,7 @@ impl ClientSession {
 
 pub async fn create_client_session(
     State(sessions): State<SessionRegistry>,
+    axum::extract::ConnectInfo(remote): axum::extract::ConnectInfo<SocketAddr>,
     headers: HeaderMap,
     Json(request): Json<CreateSessionRequest>,
 ) -> Result<Json<ClientSession>, (StatusCode, String)> {
@@ -104,7 +112,7 @@ pub async fn create_client_session(
         "session-{now_ms}-{}",
         NEXT_ID.fetch_add(1, Ordering::Relaxed)
     );
-    let session = ClientSession::queued(id, request.game_name, now_ms);
+    let session = ClientSession::queued(id, remote.ip().to_string(), request.game_name, now_ms);
     sessions.insert(key.to_owned(), session.clone());
 
     Ok(Json(session))
