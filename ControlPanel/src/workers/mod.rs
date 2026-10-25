@@ -254,7 +254,7 @@ pub async fn game_setup(
         return Ok(Json(None));
     };
 
-    session.worker_id = Some(worker_id);
+    session.worker_id = Some(worker_id.clone());
     session.status = SessionStatus::Starting;
     session.updated_at = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
