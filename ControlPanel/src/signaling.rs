@@ -7,8 +7,20 @@ use axum::{
 };
 use crate::workers::{self, SessionConnectionInfo, WorkerRegistry};
 use crate::session::SessionRegistry;
+use std::{
+    collections::HashMap,
+    net::SocketAddr,
+    sync::{Arc, Mutex},
+};
 
-pub async fn signaling(
+use futures_util::{stream::SplitSink, SinkExt, StreamExt};
+use tokio::net::{TcpListener, TcpStream};
+use tokio_tungstenite::{accept_async, tungstenite::protocol::Message, WebSocketStream};
+
+// Holds the active WebSocket sender channels
+type Tx = SplitSink<WebSocketStream<TcpStream>, Message>;
+
+pub async fn connections(
     Path(session_id): Path<String>,
     State((workers, sessions)): State<(WorkerRegistry, SessionRegistry)>,
 ) -> Result<Json<SessionConnectionInfo>, (StatusCode, String)> {
@@ -35,6 +47,26 @@ pub async fn signaling(
 }
 
 
-pub fn websocket_connection(){
-    
+pub async fn signaling(peers: PeerMap, stream: TcpStream, addr: SocketAddr){
+    println!("New peer-to-peer connection {}", addr)
+
+    let my_id = Arc::new(Mutex::new(String::new()));
+    let my_id_cb = my_id.clone();
+
+    // Accept the WebSocket handshake
+    let ws_stream = match accept_async(stream).await {
+        Ok(ws) => ws,
+        Err(e) => {
+            eprintln!("Error during WebSocket handshake with {}: {}", addr, e);
+            return;
+        }
+    };
+
+    // clients and worker id's
+    let Json(conn) = connections();
+
+    let client_ip = conn.client_id;
+    let worker_ip = conn.worker_id;
+
+
 }

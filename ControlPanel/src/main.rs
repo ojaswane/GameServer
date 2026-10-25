@@ -17,6 +17,8 @@ struct HealthCheckResponse {
 }
 
 
+type PeerMap = Arc<Mutex<HashMap<SocketAddr, Tx>>>;
+
 // when client sents the Request , to check the json response
 async fn health_check() -> Json<HealthCheckResponse> {
     let response = HealthCheckResponse {
@@ -96,13 +98,21 @@ async fn main() {
         .merge(connection_info_routes)
         .merge(setup_routes);
 
-    let address = SocketAddr::from(([127, 0, 0, 1], 3000)); // that 3000 is the port number
+    let address = SocketAddr::from(([0, 0, 0, 0], 8080)); // that 3000 is the port number
 
     println!(" server running on http://{}", address);
 
     let listener = tokio::net::TcpListener::bind(address)
         .await
         .unwrap();
+
+    // Signaling
+
+    let peers: PeerMap = Arc::new(Mutex::new(HashMap::new()));
+
+    while let Ok((stream, addr)) = listener.accept().await {
+        tokio::spawn(handle_connection(peers.clone(), stream, address));
+    }
 
     axum::serve(
         listener,
