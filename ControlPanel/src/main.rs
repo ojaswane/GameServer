@@ -1,21 +1,22 @@
 // HTTP Request (from the browser) ----> Go to the middleware ----> Go to the Home Server ----> We will send the request to the queue (if queue is not full) ----> Game agent (websockets) will pick up the request and process it ----> Game agent will send the response back to the Home Server ----> Home Server will send the response back to the middleware ----> Middleware will send the response back to the browser
 
-use axum::{Json, Router, routing::{get, post}};
+use axum::{
+    Json, Router,
+    routing::{get, post},
+};
 use serde::Serialize;
-use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 use std::time::Duration;
+use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 use tokio::sync::RwLock;
 use workers::WorkerRegistry;
 mod session;
 mod signaling;
 mod workers;
 
-
 #[derive(Serialize)]
 struct HealthCheckResponse {
     status: String,
 }
-
 
 // when client sents the Request , to check the json response
 async fn health_check() -> Json<HealthCheckResponse> {
@@ -44,15 +45,11 @@ pub async fn monitor_workers(registry: WorkerRegistry) {
 #[tokio::main]
 async fn main() {
     // Create one shared worker registry.
-    let worker_registry: workers::WorkerRegistry =
-        Arc::new(RwLock::new(HashMap::new()));
-    let session_registry: session::SessionRegistry =
-        Arc::new(RwLock::new(HashMap::new()));
-    let signaling_state = signaling::SignalingState::new(
-        Arc::clone(&worker_registry),
-        Arc::clone(&session_registry),
-    );
-        
+    let worker_registry: workers::WorkerRegistry = Arc::new(RwLock::new(HashMap::new()));
+    let session_registry: session::SessionRegistry = Arc::new(RwLock::new(HashMap::new()));
+    let signaling_state =
+        signaling::SignalingState::new(Arc::clone(&worker_registry), Arc::clone(&session_registry));
+
     let monitor_registry = Arc::clone(&worker_registry);
 
     tokio::spawn(async move {
@@ -66,7 +63,10 @@ async fn main() {
             "/workers",
             get(workers::list_workers).post(workers::register_worker),
         )
-        .route("/workers/register", axum::routing::post(workers::register_worker))
+        .route(
+            "/workers/register",
+            axum::routing::post(workers::register_worker),
+        )
         .route(
             "/workers/{worker_id}/heartbeat",
             axum::routing::post(workers::heartbeat),
@@ -86,20 +86,14 @@ async fn main() {
 
     let signaling_routes = Router::new()
         .route(
-            "/ws/workers/{worker_id}",
+            "/ws/workers/{worker_id}/sessions/{session_id}",
             get(signaling::worker_socket),
         )
-        .route(
-            "/ws/sessions/{session_id}",
-            get(signaling::client_socket),
-        )
+        .route("/ws/sessions/{session_id}", get(signaling::client_socket))
         .with_state(signaling_state);
 
     let setup_routes = Router::new()
-        .route(
-            "/workers/{worker_id}/game-setup",
-            post(workers::game_setup),
-        )
+        .route("/workers/{worker_id}/game-setup", post(workers::game_setup))
         .with_state((worker_registry, session_registry));
 
     let app = worker_routes
@@ -112,14 +106,12 @@ async fn main() {
 
     println!(" server running on http://{}", address);
 
-    let listener = tokio::net::TcpListener::bind(address)
-        .await
-        .unwrap();
+    let listener = tokio::net::TcpListener::bind(address).await.unwrap();
 
     axum::serve(
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),
     )
-        .await
-        .unwrap();
+    .await
+    .unwrap();
 }

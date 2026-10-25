@@ -118,10 +118,10 @@ The response includes client/session ID and IP, plus assigned worker ID and IP. 
 
 ### WebSocket signaling
 
-The worker opens a persistent socket after registering:
+After registering and claiming a session, the worker opens a socket for that session:
 
 ```text
-ws://<server>:8080/ws/workers/{worker_id}
+ws://<server>:8080/ws/workers/{worker_id}/sessions/{session_id}
 ```
 
 After the worker claims a session, the browser opens:
@@ -130,13 +130,9 @@ After the worker claims a session, the browser opens:
 ws://<server>:8080/ws/sessions/{session_id}
 ```
 
-The browser sends a JSON object containing an SDP offer or ICE candidate. The server forwards it to the assigned worker in this envelope:
+The browser sends its SDP offer or ICE candidate as a WebSocket text frame. The server forwards that frame unchanged to the worker. The worker sends its answer or ICE candidate as a text frame, which the server forwards unchanged to the browser. Binary frames are forwarded unchanged too. The session ID is carried in the WebSocket route, so the Control Panel does not decode signaling payloads or add an envelope. It only handles WebSocket control frames such as ping/pong itself.
 
-```json
-{"session_id":"session-...","message":{"type":"offer","sdp":"..."}}
-```
-
-The worker replies with the same envelope shape, using an answer or ICE candidate in `message`; the server forwards only `message` to the browser. The relay carries signaling JSON only. Audio/video must flow over the WebRTC peer connection. Both WebSocket routes are currently unauthenticated and should only be used on a trusted development network.
+The relay carries signaling frames only. Audio/video must flow over the WebRTC peer connection. Both WebSocket routes are currently unauthenticated and should only be used on a trusted development network.
 
 Example response when a session is assigned:
 
@@ -164,7 +160,7 @@ A session can also enter `failed`. At present, the API advances sessions from `q
 ## Current limitations
 
 - Worker and session registries are in-memory only; use the database for durable state before deployment.
-- Workers still poll `POST /workers/{worker_id}/game-setup` to claim sessions, then use WebSocket signaling for the browser's WebRTC setup.
+- Workers still poll `POST /workers/{worker_id}/game-setup` to claim sessions, then open one WebSocket per session for signaling.
 - A worker slot is reserved when a session is assigned. There is not yet an endpoint to report completion or failure and release that slot.
 - `stream_url` is not populated yet, and there is no browser endpoint to fetch session status.
 - Worker registration, heartbeats, and session requests are not authenticated yet; use these endpoints only in a trusted development environment.
