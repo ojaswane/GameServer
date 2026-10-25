@@ -8,6 +8,8 @@ use serde::Serialize;
 use std::time::Duration;
 use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 use tokio::sync::RwLock;
+use tower_http::trace::TraceLayer;
+use tracing_subscriber::EnvFilter;
 use workers::WorkerRegistry;
 mod session;
 mod signaling;
@@ -44,6 +46,10 @@ pub async fn monitor_workers(registry: WorkerRegistry) {
 
 #[tokio::main]
 async fn main() {
+    let log_filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new("info,tower_http=info"));
+    tracing_subscriber::fmt().with_env_filter(log_filter).init();
+
     // Create one shared worker registry.
     let worker_registry: workers::WorkerRegistry = Arc::new(RwLock::new(HashMap::new()));
     let session_registry: session::SessionRegistry = Arc::new(RwLock::new(HashMap::new()));
@@ -53,6 +59,7 @@ async fn main() {
     let monitor_registry = Arc::clone(&worker_registry);
 
     tokio::spawn(async move {
+        tracing::info!("worker heartbeat monitor started");
         monitor_workers(monitor_registry).await;
     });
 
@@ -100,18 +107,26 @@ async fn main() {
         .merge(session_routes)
         .merge(connection_info_routes)
         .merge(signaling_routes)
-        .merge(setup_routes);
+        .merge(setup_routes)
+        .layer(TraceLayer::new_for_http());
 
     let address = SocketAddr::from(([0, 0, 0, 0], 8080));
 
-    println!(" server running on http://{}", address);
+    let listener = match tokio::net::TcpListener::bind(address).await {
+        Ok(listener) => listener,
+        Err(error) => {
+            tracing::error!(%address, %error, "failed to bind Control Panel listener");
+            return;
+        }
+    };
+    tracing::info!(%address, "Control Panel listening");
 
-    let listener = tokio::net::TcpListener::bind(address).await.unwrap();
-
-    axum::serve(
+    if let Err(error) = axum::serve(
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),
     )
     .await
-    .unwrap();
+    {
+        tracing::error!(%error, "Control Panel server stopped with an error");
+    }
 }

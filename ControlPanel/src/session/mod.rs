@@ -1,17 +1,17 @@
 //! Session data exchanged between the browser, control panel, and game agent.
 
 use axum::{
+    Json,
     extract::State,
     http::{HeaderMap, StatusCode},
-    Json,
 };
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     net::SocketAddr,
     sync::{
-        atomic::{AtomicU64, Ordering},
         Arc,
+        atomic::{AtomicU64, Ordering},
     },
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -93,11 +93,17 @@ pub async fn create_client_session(
     let mut sessions = sessions.write().await;
     if let Some(existing) = sessions.get(key) {
         if existing.game_name != request.game_name {
+            tracing::warn!(
+                session_id = %existing.id,
+                game_name = %request.game_name,
+                "session retry rejected: idempotency key used for another game"
+            );
             return Err((
                 StatusCode::CONFLICT,
                 "Idempotency-Key was already used for a game".to_string(),
             ));
         }
+        tracing::debug!(session_id = %existing.id, "idempotent session retry returned existing session");
         return Ok(Json(existing.clone()));
     }
 
@@ -113,6 +119,12 @@ pub async fn create_client_session(
         NEXT_ID.fetch_add(1, Ordering::Relaxed)
     );
     let session = ClientSession::queued(id, remote.ip().to_string(), request.game_name, now_ms);
+    tracing::info!(
+        session_id = %session.id,
+        game_name = %session.game_name,
+        remote_ip = %remote.ip(),
+        "client session created"
+    );
     sessions.insert(key.to_owned(), session.clone());
 
     Ok(Json(session))

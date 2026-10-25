@@ -25,6 +25,16 @@ cargo run
 
 The server binds to `0.0.0.0:8080` (`http://<server-ip>:8080` from another device on a network that can reach it).
 
+### Logs
+
+Logs are written to the terminal. By default, HTTP requests, worker/session lifecycle changes, and WebSocket connects/disconnects are logged at `info` level. To also see signaling frame direction, type, and byte count, start with debug logging:
+
+```sh
+RUST_LOG=debug cargo run
+```
+
+The server does not log signaling payloads such as SDP or ICE contents. Per-frame logs are debug-only to keep routine logging lighter.
+
 ## HTTP API
 
 ### Health check
