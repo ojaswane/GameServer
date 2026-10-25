@@ -13,7 +13,7 @@ The intended end-to-end flow is:
 5. The agent prepares the game and reports the result. The Control Panel can then return connection details to the browser.
 6. The browser connects to the streaming host and sends player input through the streaming system.
 
-The current code implements worker registration, heartbeat tracking, session creation, and worker polling/assignment. Persistent WebSocket dispatch, agent status reporting, browser session-status lookup, stream setup, and player input are not implemented yet. Session and idempotency data are currently in memory and are lost when the server restarts.
+The current code implements worker registration, heartbeat tracking, session creation, worker polling/assignment, and a WebSocket relay for WebRTC signaling messages. Agent status reporting, browser session-status lookup, media capture/stream setup, and player input are not implemented yet. Session and idempotency data are currently in memory and are lost when the server restarts.
 
 ## Run locally
 
@@ -23,7 +23,7 @@ From this directory:
 cargo run
 ```
 
-The server listens for now on `http://172.20.10.2:3000`.
+The server binds to `0.0.0.0:8080` (`http://<server-ip>:8080` from another device on a network that can reach it).
 
 ## HTTP API
 
@@ -116,7 +116,27 @@ GET /sessions/{session_id}/connection-info
 
 The response includes client/session ID and IP, plus assigned worker ID and IP. These are IPs observed on the HTTP requests. A future WebSocket handler should capture the remote address for each WebSocket connection directly. This endpoint is unauthenticated like the rest of the development API, so use it only on a trusted network.
 
-`GET /sessions/{session_id}/signaling-peers` calls the same lookup and extracts those fields into local variables in the signaling module. It is an initial scaffold; it does not establish a WebSocket or exchange WebRTC messages yet.
+### WebSocket signaling
+
+The worker opens a persistent socket after registering:
+
+```text
+ws://<server>:8080/ws/workers/{worker_id}
+```
+
+After the worker claims a session, the browser opens:
+
+```text
+ws://<server>:8080/ws/sessions/{session_id}
+```
+
+The browser sends a JSON object containing an SDP offer or ICE candidate. The server forwards it to the assigned worker in this envelope:
+
+```json
+{"session_id":"session-...","message":{"type":"offer","sdp":"..."}}
+```
+
+The worker replies with the same envelope shape, using an answer or ICE candidate in `message`; the server forwards only `message` to the browser. The relay carries signaling JSON only. Audio/video must flow over the WebRTC peer connection. Both WebSocket routes are currently unauthenticated and should only be used on a trusted development network.
 
 Example response when a session is assigned:
 
@@ -144,7 +164,7 @@ A session can also enter `failed`. At present, the API advances sessions from `q
 ## Current limitations
 
 - Worker and session registries are in-memory only; use the database for durable state before deployment.
-- The diagram shows a persistent WebSocket between the game agent and server. The current implementation instead has the agent poll `POST /workers/{worker_id}/game-setup`.
+- Workers still poll `POST /workers/{worker_id}/game-setup` to claim sessions, then use WebSocket signaling for the browser's WebRTC setup.
 - A worker slot is reserved when a session is assigned. There is not yet an endpoint to report completion or failure and release that slot.
 - `stream_url` is not populated yet, and there is no browser endpoint to fetch session status.
 - Worker registration, heartbeats, and session requests are not authenticated yet; use these endpoints only in a trusted development environment.

@@ -17,8 +17,6 @@ struct HealthCheckResponse {
 }
 
 
-type PeerMap = Arc<Mutex<HashMap<SocketAddr, Tx>>>;
-
 // when client sents the Request , to check the json response
 async fn health_check() -> Json<HealthCheckResponse> {
     let response = HealthCheckResponse {
@@ -50,6 +48,10 @@ async fn main() {
         Arc::new(RwLock::new(HashMap::new()));
     let session_registry: session::SessionRegistry =
         Arc::new(RwLock::new(HashMap::new()));
+    let signaling_state = signaling::SignalingState::new(
+        Arc::clone(&worker_registry),
+        Arc::clone(&session_registry),
+    );
         
     let monitor_registry = Arc::clone(&worker_registry);
 
@@ -80,11 +82,18 @@ async fn main() {
             "/sessions/{session_id}/connection-info",
             get(workers::session_connection_info),
         )
-        .route(
-            "/sessions/{session_id}/signaling-peers",
-            get(signaling::signaling),
-        )
         .with_state((Arc::clone(&worker_registry), Arc::clone(&session_registry)));
+
+    let signaling_routes = Router::new()
+        .route(
+            "/ws/workers/{worker_id}",
+            get(signaling::worker_socket),
+        )
+        .route(
+            "/ws/sessions/{session_id}",
+            get(signaling::client_socket),
+        )
+        .with_state(signaling_state);
 
     let setup_routes = Router::new()
         .route(
@@ -96,23 +105,16 @@ async fn main() {
     let app = worker_routes
         .merge(session_routes)
         .merge(connection_info_routes)
+        .merge(signaling_routes)
         .merge(setup_routes);
 
-    let address = SocketAddr::from(([0, 0, 0, 0], 8080)); // that 3000 is the port number
+    let address = SocketAddr::from(([0, 0, 0, 0], 8080));
 
     println!(" server running on http://{}", address);
 
     let listener = tokio::net::TcpListener::bind(address)
         .await
         .unwrap();
-
-    // Signaling
-
-    let peers: PeerMap = Arc::new(Mutex::new(HashMap::new()));
-
-    while let Ok((stream, addr)) = listener.accept().await {
-        tokio::spawn(handle_connection(peers.clone(), stream, address));
-    }
 
     axum::serve(
         listener,
