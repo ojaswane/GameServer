@@ -12,7 +12,7 @@ use axum::{
 use futures_util::{SinkExt, StreamExt};
 use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 use tokio::sync::{RwLock, mpsc};
-
+use serde::{Deserialize, Serialize};
 use crate::{session::SessionRegistry, workers::WorkerRegistry};
 
 type Outbound = mpsc::Sender<Message>;
@@ -21,6 +21,21 @@ type Outbound = mpsc::Sender<Message>;
 struct SessionConnections {
     worker: Option<Outbound>,
     client: Option<Outbound>,
+}
+
+// FOR SDP message 
+#[derive(Deserialize , Serialize)]
+#[serde(rename_all = "CamelCase")]
+pub enum SignalingMessage{
+    sdp {
+        sdp_type: String,
+        sdp: String,
+    },
+    candidate {
+        candidate: String,
+        sdp_mid: Option<String>,
+        sdp_mline_index: Option<u32>,
+    }
 }
 
 #[derive(Default)]
