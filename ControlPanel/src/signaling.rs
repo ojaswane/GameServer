@@ -24,18 +24,20 @@ struct SessionConnections {
 }
 
 // FOR SDP message 
-#[derive(Deserialize , Serialize)]
-#[serde(rename_all = "CamelCase")]
-pub enum SignalingMessage{
-    sdp {
-        sdp_type: String,
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum SignalingMessage {
+    Offer {
         sdp: String,
     },
-    candidate {
+    Answer {
+        sdp: String,
+    },
+    Candidate {
         candidate: String,
         sdp_mid: Option<String>,
         sdp_mline_index: Option<u32>,
-    }
+    },
 }
 
 #[derive(Default)]
