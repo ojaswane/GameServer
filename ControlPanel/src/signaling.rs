@@ -205,6 +205,8 @@ async fn run_peer_socket(
                     | Some(Ok(message @ Message::Binary(_))) => {
                         // Forward application frames unchanged; only the session route is inspected.
 
+                        // Wait until the other peer connects.
+                    let target = loop {
                         let target = {
                             let connections = state.connections.read().await;
 
@@ -234,6 +236,7 @@ async fn run_peer_socket(
                         }
                     };
 
+                    // Forward the original message.
                     if target.send(message).await.is_err() {
                         tracing::warn!(
                             session_id = %session_id,
