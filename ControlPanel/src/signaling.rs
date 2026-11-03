@@ -204,26 +204,45 @@ async fn run_peer_socket(
                     Some(Ok(message @ Message::Text(_)))
                     | Some(Ok(message @ Message::Binary(_))) => {
                         // Forward application frames unchanged; only the session route is inspected.
+
                         let target = {
                             let connections = state.connections.read().await;
-                            connections.sessions.get(&session_id).and_then(|peers| match role {
-                                PeerRole::Worker => peers.client.clone(),
-                                PeerRole::Client => peers.worker.clone(),
-                            })
+
+                            connections
+                                .sessions
+                                .get(&session_id)
+                                .and_then(|peers| match role {
+                                    PeerRole::Worker => peers.client.clone(),
+                                    PeerRole::Client => peers.worker.clone(),
+                                })
                         };
 
-                        let Some(target) = target else {
-                            tracing::warn!(
-                                session_id = %session_id,
-                                peer = role.as_str(),
-                                "signaling frame received without a connected peer"
-                            );
-                            break;
-                        };
-                        if target.send(message).await.is_err() {
-                            tracing::warn!(session_id = %session_id, peer = role.as_str(), "could not queue signaling frame for peer");
-                            break;
+                        match target {
+                            Some(target) => break target,
+
+                            None => {
+                                tracing::debug!(
+                                    session_id = %session_id,
+                                    peer = role.as_str(),
+                                    "Waiting for other peer to connect"
+                                );
+
+                                tokio::time::sleep(
+                                    std::time::Duration::from_millis(200)
+                                ).await;
+                            }
                         }
+                    };
+
+                    if target.send(message).await.is_err() {
+                        tracing::warn!(
+                            session_id = %session_id,
+                            peer = role.as_str(),
+                            "Could not queue signaling frame for peer"
+                        );
+                        break;
+                    }
+
                     }
                     Some(Ok(Message::Ping(bytes))) => {
                         if sink.send(Message::Pong(bytes)).await.is_err() { break; }
