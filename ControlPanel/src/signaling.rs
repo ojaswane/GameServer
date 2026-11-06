@@ -125,6 +125,8 @@ pub async fn client_socket(
     ws: WebSocketUpgrade,
 ) -> Result<Response, (StatusCode, String)> {
     let worker_id = assigned_worker(&state.sessions, &session_id).await?;
+    check_worker_availability(&state.workers, &worker_id).await?;
+
     let connections = state.connections.read().await;
     let worker_connected = connections
         .sessions
@@ -150,6 +152,31 @@ pub async fn client_socket(
             state,
         )
     }))
+}
+
+/// Validate the assigned worker when the browser connects to signaling.
+/// Its session slot was reserved when the worker claimed this session.
+async fn check_worker_availability(
+    workers: &WorkerRegistry,
+    worker_id: &str,
+) -> Result<(), (StatusCode, String)> {
+    let workers = workers.read().await;
+    let worker = workers.get(worker_id).ok_or_else(|| {
+        (
+            StatusCode::NOT_FOUND,
+            format!("Assigned worker '{worker_id}' was not found"),
+        )
+    })?;
+
+    if !worker.is_online() {
+        tracing::warn!(worker_id = %worker_id, "client signaling connection rejected: worker is offline");
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Assigned worker is offline".to_string(),
+        ));
+    }
+
+    Ok(())
 }
 
 async fn assigned_worker(

@@ -31,6 +31,10 @@ pub enum WorkerStatus {
 pub type WorkerRegistry = Arc<RwLock<HashMap<String, Worker>>>;
 
 impl Worker {
+    pub fn is_online(&self) -> bool {
+        self.status == WorkerStatus::Online
+    }
+
     pub fn available_slots(&self) -> u32 {
         self.max_sessions.saturating_sub(self.active_sessions) as u32
     }
