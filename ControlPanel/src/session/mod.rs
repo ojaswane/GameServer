@@ -171,5 +171,7 @@ pub fn check_worker_availability(
         ));
     }
 
+    // TODO: later send the data through this signaling server
+    tracing::info!(worker_id = %worker_id, "Worker is available for session assignment");
     Ok(())
 }
