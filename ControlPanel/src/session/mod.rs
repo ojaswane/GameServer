@@ -119,6 +119,12 @@ pub async fn create_client_session(
         NEXT_ID.fetch_add(1, Ordering::Relaxed)
     );
     let session = ClientSession::queued(id, remote.ip().to_string(), request.game_name, now_ms);
+    
+    check_worker_availability(
+        session.worker_id.as_deref().unwrap_or_default(),
+        &sessions,
+    )?;
+
     tracing::info!(
         session_id = %session.id,
         game_name = %session.game_name,
@@ -128,4 +134,42 @@ pub async fn create_client_session(
     sessions.insert(key.to_owned(), session.clone());
 
     Ok(Json(session))
+}
+
+
+// once the SDP offer is recived , we will check that the worker is available or not
+// if the worker is not available then we will return the error to the client and the client session will be removed from registry
+
+pub fn check_worker_availability(
+    worker_id: &str,
+    workers: &WorkerRegistry,
+) -> Result<(), (StatusCode, String)> {
+
+    // to finish the check and block the thread of this until the worker is found thats why we use the futures::executor::block_on to block the thread until the worker is found
+    let workers = futures::executor::block_on(workers.read());
+    let worker = workers.get(worker_id).ok_or_else(|| {
+        (
+            StatusCode::NOT_FOUND,
+            format!("Worker '{worker_id}' was not found"),
+        )
+    })?;
+
+    if worker.status != WorkerStatus::Online {
+        tracing::warn!(worker_id = %worker_id, "Worker is offline");
+
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Worker is offline".to_string(),
+        ));
+    }
+
+    if worker.available_slots() == 0 {
+        tracing::warn!(worker_id = %worker_id, "Worker has no available session slots");
+        return Err((
+            StatusCode::CONFLICT,
+            "Worker has no available session slots".to_string(),
+        ));
+    }
+
+    Ok(())
 }
